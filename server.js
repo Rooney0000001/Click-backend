@@ -7,34 +7,54 @@ const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 
-// Allow requests from your Vercel frontend
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// Folder to temporarily store clips
 const OUTPUT_DIR = path.join(__dirname, 'clips');
 if (!fs.existsSync(OUTPUT_DIR)) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 }
 
-// Health check route
 app.get('/', (req, res) => {
   res.json({ message: '🎬 QuickClip backend is running!' });
 });
 
-// Main clip route
 app.post('/api/clip', (req, res) => {
   const { url, startTime, endTime, quality } = req.body;
 
-  // Validate inputs
   if (!url || !startTime || !endTime) {
     return res.status(400).json({
       error: 'URL, start time, and end time are required.'
     });
   }
 
-  // Map quality label to yt-dlp format string
   const qualityMap = {
+    '1080p': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
+    '720p':  'bestvideo[height<=720]+bestaudio/best[height<=720]',
+    '480p':  'bestvideo[height<=480]+bestaudio/best[height<=480]',
+    '360p':  'bestvideo[height<=360]+bestaudio/best[height<=360]',
+    'Auto':  'bestvideo+bestaudio/best'
+  };
+
+  const format = qualityMap[quality] || qualityMap['Auto'];
+  const filename = `quickclip_${uuidv4()}.mp4`;
+  const outputPath = path.join(OUTPUT_DIR, filename);
+
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+  const command = `yt-dlp \
+    -f "${format}" \
+    --download-sections "*${startTime}-${endTime}" \
+    --merge-output-format mp4 \
+    --no-check-certificates \
+    --add-header "User-Agent:${userAgent}" \
+    --extractor-retries 3 \
+    --sleep-interval 1 \
+    --no-playlist \
+    -o "${outputPath}" \
+    "${url}"`;
+
+  console.log(`⏳ Clipping: ${u  const qualityMap = {
     '1080p': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
     '720p':  'bestvideo[height<=720]+bestaudio/best[height<=720]',
     '480p':  'bestvideo[height<=480]+bestaudio/best[height<=480]',
