@@ -1,0 +1,68 @@
+const express = require('express');
+const cors = require('cors');
+const { exec } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+
+const app = express();
+
+app.use(cors({ origin: '*' }));
+app.use(express.json());
+
+const OUTPUT_DIR = path.join(__dirname, 'clips');
+if (!fs.existsSync(OUTPUT_DIR)) {
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+}
+
+app.get('/', (req, res) => {
+  res.json({ message: '🎬 QuickClip backend is running!' });
+});
+
+app.post('/api/clip', (req, res) => {
+  const { url, startTime, endTime, quality } = req.body;
+
+  if (!url || !startTime || !endTime) {
+    return res.status(400).json({ error: 'URL, start time, and end time are required.' });
+  }
+
+  const qualityMap = {
+    '1080p': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
+    '720p': 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+    '480p': 'bestvideo[height<=480]+bestaudio/best[height<=480]',
+    '360p': 'bestvideo[height<=360]+bestaudio/best[height<=360]',
+    'Auto': 'bestvideo+bestaudio/best'
+  };
+
+  const format = qualityMap[quality] || qualityMap['Auto'];
+  const filename = 'quickclip_' + uuidv4() + '.mp4';
+  const outputPath = path.join(OUTPUT_DIR, filename);
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+  const command = 'yt-dlp -f "' + format + '" --download-sections "*' + startTime + '-' + endTime + '" --merge-output-format mp4 --no-check-certificates --geo-bypass --add-header "User-Agent:' + userAgent + '" --extractor-retries 5 --sleep-interval 2 --no-playlist -o "' + outputPath + '" "' + url + '"';
+
+  console.log('Clipping: ' + url + ' [' + startTime + ' to ' + endTime + ']');
+
+  exec(command, { timeout: 300000 }, (error, stdout, stderr) => {
+    if (error) {
+      console.error('yt-dlp error:', stderr);
+      return res.status(500).json({ error: 'Failed to process video. Please check the link and try again.' });
+    }
+
+    if (!fs.existsSync(outputPath)) {
+      return res.status(500).json({ error: 'Clip was not created. Please try again.' });
+    }
+
+    const downloadName = 'quickclip_' + startTime.replace(/:/g, '-') + '_to_' + endTime.replace(/:/g, '-') + '.mp4';
+
+    res.download(outputPath, downloadName, (err) => {
+      fs.unlink(outputPath, () => {});
+      if (err) console.error('Download error:', err);
+    });
+  });
+});
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log('QuickClip backend running on port ' + PORT);
+});
