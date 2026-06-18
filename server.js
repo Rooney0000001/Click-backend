@@ -39,6 +39,37 @@ app.post('/api/clip', (req, res) => {
   const outputPath = path.join(OUTPUT_DIR, filename);
   const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+  const command = 'yt-dlp -f "' + format + '" --download-sections "*' + startTime + '-' + endTime + '" --merge-output-format mp4 --no-check-certificates --geo-bypass --add-header "User-Agent:' + userAgent + '" --extractor-retries 5 --sleep-interval 2 --no-playlist -o "' + outputPath + '" "' + url + '"';
+
+  console.log('Clipping: ' + url + ' [' + startTime + ' to ' + endTime + ']');
+
+  exec(command, { timeout: 300000 }, (error, stdout, stderr) => {
+    if (error) {
+      console.error('yt-dlp error:', stderr);
+      return res.status(500).json({ error: 'Failed to process video. Please check the link and try again.' });
+    }
+
+    if (!fs.existsSync(outputPath)) {
+      return res.status(500).json({ error: 'Clip was not created. Please try again.' });
+    }
+
+    const downloadName = 'quickclip_' + startTime.replace(/:/g, '-') + '_to_' + endTime.replace(/:/g, '-') + '.mp4';
+
+    res.download(outputPath, downloadName, (err) => {
+      fs.unlink(outputPath, () => {});
+      if (err) console.error('Download error:', err);
+    });
+  });
+});
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log('QuickClip backend running on port ' + PORT);
+});  const format = qualityMap[quality] || qualityMap['Auto'];
+  const filename = 'quickclip_' + uuidv4() + '.mp4';
+  const outputPath = path.join(OUTPUT_DIR, filename);
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
   const command = 'yt-dlp -f "' + format + '" --download-sections "*' + startTime + '-' + endTime + '" --merge-output-format mp4 --no-check-certificates --add-header "User-Agent:' + userAgent + '" --extractor-retries 3 --sleep-interval 1 --no-playlist -o "' + outputPath + '" "' + url + '"';
 
   console.log('Clipping: ' + url + ' [' + startTime + ' to ' + endTime + ']');
